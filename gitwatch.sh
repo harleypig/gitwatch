@@ -84,7 +84,7 @@ SLEEP_PID=
 SLEEP_TIME=2
 UNAME="$(uname)"
 
-decclare -a INW_ARGS
+declare -a INW_ARGS
 
 #############################################################################
 # Functions
