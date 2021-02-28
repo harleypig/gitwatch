@@ -465,12 +465,12 @@ eval "$INW" "${INW_ARGS[@]}" | while read -r line; do
       fi
     fi
 
-    # CD into target directory
-    # XXX: Why are we doing this if we've already done it above?
-    cd "$TARGETDIR" || {
-      stderr "Error: Can't change directory to '${TARGETDIR}'."
-      exit 6
-    }
+#    # CD into target directory
+#    # XXX: Why are we doing this if we've already done it above?
+#    cd "$TARGETDIR" || {
+#      stderr "Error: Can't change directory to '$TARGETDIR'."
+#      exit 6
+#    }
 
     STATUS=$($GIT status -s)
 
