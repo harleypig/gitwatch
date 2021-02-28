@@ -3,6 +3,7 @@
 # gitwatch - watch file or directory and git commit all changes as they happen
 
 # XXX: Add support for multiple watch directories
+# XXX: Can we use git -C instead of changing to the directory ourselves?
 # XXX: Create man page
 
 # Copyright (C) 2013-2018  Patrick Lehner
@@ -63,7 +64,6 @@ BRANCH="${GW_GIT_BRANCH:-}"
 COMMITMSG="${GW_COMMITMSG:-Scripted auto-commit on change (%d) by gitwatch.sh}"
 DATE_FMT="${GW_DATE_FMT:-+%Y-%m-%d %H:%M:%S}"
 EVENTS="${GW_EVENTS:-close_write,move,move_self,delete,create,modify}"
-GIT_DIR="${GW_GIT_DIR:-}"
 REMOTE="${GW_REMOTE:-}"
 
 LISTCHANGES=-1
@@ -172,6 +172,19 @@ trap "cleanup" EXIT # make sure the timeout is killed when exiting script
 # Sanity checks
 
 #-----------------------------------------------------------------------------
+# If GW_GIT_DIR is set, verify that it is a directory
+# XXX: Add validation that it is actually a .git dir.
+
+if [[ -n $GW_GIT_DIR ]]; then
+  if [[ -d $GIT_DIR ]]; then
+    GIT_DIR="${GW_GIT_DIR:-}"
+  else
+    stderr ".git location is not a directory: $GIT_DIR"
+    exit 4
+  fi
+fi
+
+#-----------------------------------------------------------------------------
 # If custom bin names are given for git, inotifywait, or readlink, use those;
 # otherwise fall back to "git", "inotifywait", and "readlink"
 
@@ -264,30 +277,30 @@ if [ -d "$IN" ]; then # if the target is a directory
   # construct inotifywait-commandline
   if [[ $UNAME == 'Darwin' ]]; then
     # still need to fix EVENTS since it wants them listed one-by-one
-    INW_ARGS=('--recursive' "$EVENTS" '-E' '--exclude' "'(\.git/|\.git$)'" "\"$TARGETDIR\"")
+    INW_ARGS=('--recursive' "$EVENTS" '-E' '--exclude' "'(\.git/|\.git$)'" "'$TARGETDIR'")
 
   else
-    INW_ARGS=("-qmr" "-e" "$EVENTS" "--exclude" "'(\.git/|\.git$)'" "\"$TARGETDIR\"")
+    INW_ARGS=('-qmr' '-e' "$EVENTS" '--exclude' "'(\.git/|\.git$)'" "'$TARGETDIR'")
   fi
 
   GIT_ADD_ARGS="--all ." # add "." (CWD) recursively to index
   # XXX: Was this '-a' removed by accident? or is this comment not needed
   #      anymore?
-  GIT_COMMIT_ARGS=""     # add -a switch to "commit" call just to be sure
+  GIT_COMMIT_ARGS='' # add -a switch to "commit" call just to be sure
 
 #-----------------------------------------------------------------------------
 elif [ -f "$IN" ]; then # if the target is a single file
+  TARGETDIR="${IN%/*}"
 
-  TARGETDIR=$(dirname "$IN") # dir to CD into before using git commands: extract from file name
   # construct inotifywait-commandline
-  if [ "$(uname)" != "Darwin" ]; then
-    INW_ARGS=("-qm" "-e" "$EVENTS" "$IN")
-  else
+  if [[ $UNAME == 'Darwin' ]]; then
     INW_ARGS=("$EVENTS" "$IN")
+  else
+    INW_ARGS=('-qm' '-e' "$EVENTS" "$IN")
   fi
 
   GIT_ADD_ARGS="$IN" # add only the selected file to index
-  GIT_COMMIT_ARGS="" # no need to add anything more to "commit" call
+  GIT_COMMIT_ARGS='' # no need to add anything more to "commit" call
 
 #-----------------------------------------------------------------------------
 else
@@ -295,18 +308,13 @@ else
   exit 3
 fi
 
-# If $GIT_DIR is set, verify that it is a directory, and then add parameters to
-# git command as need be
-if [ -n "$GIT_DIR" ]; then
+#-----------------------------------------------------------------------------
+# If $GIT_DIR is set, add parameters to git command as need be
 
-  if [ ! -d "$GIT_DIR" ]; then
-    stderr ".git location is not a directory: $GIT_DIR"
-    exit 4
-  fi
+[[ -n "$GIT_DIR" ]] \
+  && GIT="$GIT --no-pager --work-tree $TARGETDIR --git-dir $GIT_DIR"
 
-  GIT="$GIT --no-pager --work-tree $TARGETDIR --git-dir $GIT_DIR"
-fi
-
+#-----------------------------------------------------------------------------
 # Check if commit message needs any formatting (date splicing)
 if ! grep "%d" > /dev/null <<< "$COMMITMSG"; then # if commitmsg didn't contain %d, grep returns non-zero
   DATE_FMT=""                                     # empty date format (will disable splicing in the main loop)
