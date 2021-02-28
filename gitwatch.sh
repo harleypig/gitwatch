@@ -10,6 +10,7 @@
 #      https://about.codecov.io/blog/how-to-get-coverage-metrics-for-bash-scripts/
 # XXX: add die function
 # XXX: change stderr to warn
+# XXX: add log/debug functions
 
 # Copyright (C) 2013-2018  Patrick Lehner
 #   with modifications and contributions by:
@@ -245,7 +246,7 @@ set_arguments() {
     fi
 
     GIT_ADD_ARGS="$watch_path" # add only the selected file to index
-    GIT_COMMIT_ARGS='' # no need to add anything more to "commit" call
+    GIT_COMMIT_ARGS=''         # no need to add anything more to "commit" call
 
   #---------------------------------------------------------------------------
   else
@@ -323,28 +324,23 @@ diff-lines() {
 # XXX: Document me!!!
 
 push_cmd() {
-  local push
-
   [[ -z $REMOTE ]] && REMOTE="${GW_REMOTE:-}"
 
-  if [[ -n $REMOTE ]]; then # are we pushing to a remote?
+  if [[ -n $REMOTE ]]; then
     [[ -z $BRANCH ]] && BRANCH="${GW_GIT_BRANCH:-}"
 
-    if [[ -z $BRANCH ]]; then  # Do we have a branch set to push to ?
-      push="$GIT push $REMOTE" # Branch not set, push to remote without a branch
+    if [[ -z $BRANCH ]]; then
+      # Branch not set, push to remote without a branch
+      $GIT push "$REMOTE"
 
     else
-      # check if we are on a detached HEAD
-      if HEADREF=$($GIT symbolic-ref HEAD 2> /dev/null); then # HEAD is not detached
-        push="$GIT push $REMOTE ${HEADREF#refs/heads/}:$BRANCH"
-
-      else # HEAD is detached
-        push="$GIT push $REMOTE $BRANCH"
+      if headref=$($GIT symbolic-ref HEAD 2> /dev/null); then
+        BRANCH="${headref#refs/heads/}:$BRANCH"
       fi
+
+      $GIT push "$REMOTE" "$BRANCH"
     fi
   fi
-
-  printf '%s' "$push"
 }
 
 ###############################################################################
@@ -422,16 +418,19 @@ WATCH="$1"
 [[ -z $WATCH ]] && WATCH="${WATCH:-$GW_WATCH}"
 [[ -z $WATCH ]] && shelp
 
-###############################################################################
-
 set_arguments "$WATCH"
 
+###############################################################################
 #-----------------------------------------------------------------------------
 # Check if commit message needs any formatting (date splicing)
 
-if ! grep "%d" > /dev/null <<< "$COMMITMSG"; then # if commitmsg didn't contain %d, grep returns non-zero
-  DATE_FMT=""                                     # empty date format (will disable splicing in the main loop)
-  FORMATTED_COMMITMSG="$COMMITMSG"                # save (unchanging) commit message
+# If commitmsg didn't contain %d, grep returns non-zero
+# empty date format (will disable splicing in the main loop)
+# save (unchanging) commit message
+
+if ! grep "%d" > /dev/null <<< "$COMMITMSG"; then
+  DATE_FMT=''
+  FORMATTED_COMMITMSG="$COMMITMSG"
 fi
 
 ###############################################################################
@@ -494,13 +493,7 @@ eval "$INW" "${INW_ARGS[@]}" | while read -r line; do
       # shellcheck disable=SC2086
       $GIT commit $GIT_COMMIT_ARGS -m"$FORMATTED_COMMITMSG" # construct commit message and commit
 
-      PUSH_CMD="$(push_cmd)"
-
-      if [ -n "$PUSH_CMD" ]; then
-        echo "Push command is $PUSH_CMD"
-        # XXX: GAH! Again with the eval! No! Fix!
-        eval "$PUSH_CMD"
-      fi
+      push_cmd
     fi
   ) & # and send into background
 
