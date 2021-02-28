@@ -454,6 +454,8 @@ fi
 
 # XXX: GAH! No! Bad dev for using eval! Fix!
 
+echo "$INW ${INW_ARGS[*]}"
+
 eval $INW "${INW_ARGS[@]}" | while read -r line; do
   # is there already a timeout process running?
   if [[ -n $SLEEP_PID ]] && kill -0 "$SLEEP_PID" &> /dev/null; then
