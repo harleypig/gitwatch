@@ -336,12 +336,14 @@ diff-lines() {
 
 push_cmd() {
   [[ -z $REMOTE ]] && REMOTE="${GW_REMOTE:-}"
+  echo "push: $REMOTE"
 
   if [[ -n $REMOTE ]]; then
     [[ -z $BRANCH ]] && BRANCH="${GW_GIT_BRANCH:-}"
 
     if [[ -z $BRANCH ]]; then
       # Branch not set, push to remote without a branch
+      echo "git push: $GIT push $REMOTE"
       $GIT push "$REMOTE"
 
     else
@@ -349,6 +351,7 @@ push_cmd() {
         BRANCH="${headref#refs/heads/}:$BRANCH"
       fi
 
+      echo "git push: $GIT push $REMOTE $BRANCH"
       $GIT push "$REMOTE" "$BRANCH"
     fi
   fi
@@ -454,7 +457,9 @@ fi
 
 # XXX: GAH! No! Bad dev for using eval! Fix!
 
-echo "$INW ${INW_ARGS[*]}"
+echo "inotify: $INW ${INW_ARGS[*]}"
+echo "git add: $GIT add $GIT_ADD_ARGS"
+echo "git commit: $GIT commit -m <msg>"
 
 eval $INW "${INW_ARGS[@]}" | while read -r line; do
   # is there already a timeout process running?
