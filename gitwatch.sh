@@ -63,7 +63,6 @@
 BRANCH="${GW_GIT_BRANCH:-}"
 COMMITMSG="${GW_COMMITMSG:-Scripted auto-commit on change (%d) by gitwatch.sh}"
 DATE_FMT="${GW_DATE_FMT:-+%Y-%m-%d %H:%M:%S}"
-EVENTS="${GW_EVENTS:-close_write,move,move_self,delete,create,modify}"
 REMOTE="${GW_REMOTE:-}"
 
 LISTCHANGES=-1
@@ -177,7 +176,8 @@ trap "cleanup" EXIT # make sure the timeout is killed when exiting script
 
 if [[ -n $GW_GIT_DIR ]]; then
   if [[ -d $GIT_DIR ]]; then
-    GIT_DIR="${GW_GIT_DIR:-}"
+    GIT_DIR="$GW_GIT_DIR"
+
   else
     stderr ".git location is not a directory: $GIT_DIR"
     exit 4
@@ -201,7 +201,10 @@ if [[ $UNAME == 'Darwin' ]]; then
   # https://emcrisostomo.github.io/fswatch/doc/1.14.0/fswatch.html/Invoking-fswatch.html#Numeric-Event-Flags
   # default of 414 = MovedTo + MovedFrom + Renamed + Removed + Updated + Created
   #                = 256 + 128+ 16 + 8 + 4 + 2
-  EVENTS="${EVENTS:---event=414}"
+  EVENTS="${GW_EVENTS:---event=414}"
+
+else
+  EVENTS="${GW_EVENTS:-close_write,move,move_self,delete,create,modify}"
 fi
 
 # Check availability of selected binaries and die if not met
@@ -255,6 +258,8 @@ WATCH_ARG="$1"
 ###############################################################################
 
 # Expand the path to the target to absolute path
+# XXX: Use -e instead of -f and handle no such file/directory that way.
+
 IN=$($RL -f "$WATCH_ARG") || {
   echo "Seems like your readlink doesn't support '-f'. Running without."
   [[ $UNAME == 'Darwin' ]] && echo "Please 'brew install coreutils'."
@@ -309,63 +314,79 @@ else
 fi
 
 #-----------------------------------------------------------------------------
-# If $GIT_DIR is set, add parameters to git command as need be
+# CD into target directory
 
-[[ -n "$GIT_DIR" ]] \
-  && GIT="$GIT --no-pager --work-tree $TARGETDIR --git-dir $GIT_DIR"
-
-#-----------------------------------------------------------------------------
-# Check if commit message needs any formatting (date splicing)
-if ! grep "%d" > /dev/null <<< "$COMMITMSG"; then # if commitmsg didn't contain %d, grep returns non-zero
-  DATE_FMT=""                                     # empty date format (will disable splicing in the main loop)
-  FORMATTED_COMMITMSG="$COMMITMSG"                # save (unchanging) commit message
-fi
-
-# CD into right dir
 cd "$TARGETDIR" || {
   stderr "Error: Can't change directory to '${TARGETDIR}'."
   exit 5
 }
 
+#-----------------------------------------------------------------------------
+# If $GIT_DIR is set, add parameters to git command as need be
+
+[[ -n $GIT_DIR ]] \
+  && GIT="$GIT --no-pager --work-tree $TARGETDIR --git-dir $GIT_DIR"
+
+#-----------------------------------------------------------------------------
+# Check if commit message needs any formatting (date splicing)
+
+if ! grep "%d" > /dev/null <<< "$COMMITMSG"; then # if commitmsg didn't contain %d, grep returns non-zero
+  DATE_FMT=""                                     # empty date format (will disable splicing in the main loop)
+  FORMATTED_COMMITMSG="$COMMITMSG"                # save (unchanging) commit message
+fi
+
+#-----------------------------------------------------------------------------
+PUSH_CMD=
+
 if [ -n "$REMOTE" ]; then        # are we pushing to a remote?
   if [ -z "$BRANCH" ]; then      # Do we have a branch set to push to ?
     PUSH_CMD="$GIT push $REMOTE" # Branch not set, push to remote without a branch
+
   else
     # check if we are on a detached HEAD
     if HEADREF=$($GIT symbolic-ref HEAD 2> /dev/null); then # HEAD is not detached
       #PUSH_CMD="$GIT push $REMOTE $(sed "s_^refs/heads/__" <<< "$HEADREF"):$BRANCH"
       PUSH_CMD="$GIT push $REMOTE ${HEADREF#refs/heads/}:$BRANCH"
+
     else # HEAD is detached
       PUSH_CMD="$GIT push $REMOTE $BRANCH"
     fi
   fi
-else
-  PUSH_CMD="" # if not remote is selected, make sure push command is empty
 fi
 
+#-----------------------------------------------------------------------------
 # A function to reduce git diff output to the actual changed content, and insert file line numbers.
 # Based on "https://stackoverflow.com/a/12179492/199142" by John Mellor
+
 diff-lines() {
   local path=
   local line=
   local previous_path=
+
   while read -r; do
     esc=$'\033'
+
     if [[ $REPLY =~ ---\ (a/)?([^[:blank:]$esc]+).* ]]; then
       previous_path=${BASH_REMATCH[2]}
       continue
+
     elif [[ $REPLY =~ \+\+\+\ (b/)?([^[:blank:]$esc]+).* ]]; then
       path=${BASH_REMATCH[2]}
+
     elif [[ $REPLY =~ @@\ -[0-9]+(,[0-9]+)?\ \+([0-9]+)(,[0-9]+)?\ @@.* ]]; then
       line=${BASH_REMATCH[2]}
+
     elif [[ $REPLY =~ ^($esc\[[0-9;]+m)*([\ +-]) ]]; then
       REPLY=${REPLY:0:150} # limit the line width, so it fits in a single line in most git log outputs
+
       if [[ $path == "/dev/null" ]]; then
         echo "File $previous_path deleted or moved."
         continue
+
       else
         echo "$path:$line: $REPLY"
       fi
+
       if [[ ${BASH_REMATCH[2]} != - ]]; then
         ((line++))
       fi
@@ -380,6 +401,9 @@ diff-lines() {
 #   process some time (in case there are a lot of changes or w/e); if there is already a timer
 #   running when we receive an event, we kill it and start a new one; thus we only commit if there
 #   have been no changes reported during a whole timeout period
+
+# XXX: GAH! No! Bad dev for using eval! Fix!
+
 eval "$INW" "${INW_ARGS[@]}" | while read -r line; do
   # is there already a timeout process running?
   if [[ -n $SLEEP_PID ]] && kill -0 "$SLEEP_PID" &> /dev/null; then
@@ -390,42 +414,50 @@ eval "$INW" "${INW_ARGS[@]}" | while read -r line; do
 
   # start timeout process
   (
-    sleep "$SLEEP_TIME" # wait some more seconds to give apps time to write out all changes
+    # wait some more seconds to give apps time to write out all changes
+    sleep "$SLEEP_TIME"
 
     if [ -n "$DATE_FMT" ]; then
-      #FORMATTED_COMMITMSG="$(sed "s/%d/$(date "$DATE_FMT")/" <<< "$COMMITMSG")" # splice the formatted date-time into the commit message
-      FORMATTED_COMMITMSG="${COMMITMSG/\%d/$(date "$DATE_FMT")}" # splice the formatted date-time into the commit message
+      # splice the formatted date-time into the commit message
+      FORMATTED_COMMITMSG="${COMMITMSG/\%d/$(date "$DATE_FMT")}"
     fi
 
     if [[ $LISTCHANGES -ge 0 ]]; then # allow listing diffs in the commit log message, unless if there are too many lines changed
       DIFF_COMMITMSG="$($GIT diff -U0 "$LISTCHANGES_COLOR" | diff-lines)"
       LENGTH_DIFF_COMMITMSG=0
+
       if [[ $LISTCHANGES -ge 1 ]]; then
         LENGTH_DIFF_COMMITMSG=$(echo -n "$DIFF_COMMITMSG" | grep -c '^')
       fi
+
       if [[ $LENGTH_DIFF_COMMITMSG -le $LISTCHANGES ]]; then
         # Use git diff as the commit msg, unless if files were added or deleted but not modified
         if [ -n "$DIFF_COMMITMSG" ]; then
           FORMATTED_COMMITMSG="$DIFF_COMMITMSG"
+
         else
           FORMATTED_COMMITMSG="New files added: $($GIT status -s)"
         fi
+
       else
-        #FORMATTED_COMMITMSG="Many lines were modified. $FORMATTED_COMMITMSG"
         FORMATTED_COMMITMSG=$($GIT diff --stat | grep '|')
       fi
     fi
 
-    # CD into right dir
+    # CD into target directory
+    # XXX: Why are we doing this if we've already done it above?
     cd "$TARGETDIR" || {
       stderr "Error: Can't change directory to '${TARGETDIR}'."
       exit 6
     }
+
     STATUS=$($GIT status -s)
+
     if [ -n "$STATUS" ]; then # only commit if status shows tracked changes.
       # We want GIT_ADD_ARGS and GIT_COMMIT_ARGS to be word splitted
       # shellcheck disable=SC2086
       $GIT add $GIT_ADD_ARGS # add file(s) to index
+
       # shellcheck disable=SC2086
       $GIT commit $GIT_COMMIT_ARGS -m"$FORMATTED_COMMITMSG" # construct commit message and commit
 
