@@ -75,6 +75,30 @@ UNAME="$(uname)"
 # Functions
 
 #-----------------------------------------------------------------------------
+# print all arguments to stderr
+
+stderr() { echo "$@" >&2; }
+
+#-----------------------------------------------------------------------------
+# Tests for the availability of a command
+
+is_command() { hash "$1" 2> /dev/null; }
+
+#-----------------------------------------------------------------------------
+# clean up at end of program, killing the remaining sleep process if it still
+# exists
+
+cleanup() {
+  [[ -n $SLEEP_PID ]] \
+    && kill -0 "$SLEEP_PID" &> /dev/null \
+    && kill "$SLEEP_PID" &> /dev/null
+
+  exit 0
+}
+
+trap "cleanup" EXIT # make sure the timeout is killed when exiting script
+
+#-----------------------------------------------------------------------------
 # Print a message about how to use this script
 
 shelp() {
@@ -144,28 +168,21 @@ EOH
 }
 
 #-----------------------------------------------------------------------------
-# print all arguments to stderr
+# Expand the path to the target to absolute path
+# XXX: Use -e instead of -f and handle no such file/directory that way.
 
-stderr() { echo "$@" >&2; }
+expand_path() {
+  local path="$1"
+  local expanded=
 
-#-----------------------------------------------------------------------------
-# Tests for the availability of a command
+  expanded=$($RL -f "$path") || {
+    echo "Seems like your readlink doesn't support '-f'. Running without."
+    [[ $UNAME == 'Darwin' ]] && echo "Please 'brew install coreutils'."
+    expanded=$($RL "$path")
+  }
 
-is_command() { hash "$1" 2> /dev/null; }
-
-#-----------------------------------------------------------------------------
-# clean up at end of program, killing the remaining sleep process if it still
-# exists
-
-cleanup() {
-  [[ -n $SLEEP_PID ]] \
-    && kill -0 "$SLEEP_PID" &> /dev/null \
-    && kill "$SLEEP_PID" &> /dev/null
-
-  exit 0
+  printf '%s' "$expanded"
 }
-
-trap "cleanup" EXIT # make sure the timeout is killed when exiting script
 
 ###############################################################################
 # Sanity checks
@@ -257,14 +274,7 @@ WATCH_ARG="$1"
 
 ###############################################################################
 
-# Expand the path to the target to absolute path
-# XXX: Use -e instead of -f and handle no such file/directory that way.
-
-IN=$($RL -f "$WATCH_ARG") || {
-  echo "Seems like your readlink doesn't support '-f'. Running without."
-  [[ $UNAME == 'Darwin' ]] && echo "Please 'brew install coreutils'."
-  IN=$($RL "$WATCH_ARG")
-}
+IN="$(expand_path "$WATCH_ARG")"
 
 #-----------------------------------------------------------------------------
 if [ -d "$IN" ]; then # if the target is a directory
@@ -288,7 +298,7 @@ if [ -d "$IN" ]; then # if the target is a directory
     INW_ARGS=('-qmr' '-e' "$EVENTS" '--exclude' "'(\.git/|\.git$)'" "'$TARGETDIR'")
   fi
 
-  GIT_ADD_ARGS="--all ." # add "." (CWD) recursively to index
+  GIT_ADD_ARGS='--all .' # add "." (CWD) recursively to index
   # XXX: Was this '-a' removed by accident? or is this comment not needed
   #      anymore?
   GIT_COMMIT_ARGS='' # add -a switch to "commit" call just to be sure
@@ -338,14 +348,13 @@ fi
 #-----------------------------------------------------------------------------
 PUSH_CMD=
 
-if [ -n "$REMOTE" ]; then        # are we pushing to a remote?
-  if [ -z "$BRANCH" ]; then      # Do we have a branch set to push to ?
+if [[ -n $REMOTE ]]; then        # are we pushing to a remote?
+  if [[ -z $BRANCH ]]; then      # Do we have a branch set to push to ?
     PUSH_CMD="$GIT push $REMOTE" # Branch not set, push to remote without a branch
 
   else
     # check if we are on a detached HEAD
     if HEADREF=$($GIT symbolic-ref HEAD 2> /dev/null); then # HEAD is not detached
-      #PUSH_CMD="$GIT push $REMOTE $(sed "s_^refs/heads/__" <<< "$HEADREF"):$BRANCH"
       PUSH_CMD="$GIT push $REMOTE ${HEADREF#refs/heads/}:$BRANCH"
 
     else # HEAD is detached
