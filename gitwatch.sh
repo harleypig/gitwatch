@@ -184,6 +184,64 @@ expand_path() {
   printf '%s' "$expanded"
 }
 
+#-----------------------------------------------------------------------------
+# Set TARGETDIR, inotifywait and git arguments
+
+set_arguments() {
+  #---------------------------------------------------------------------------
+  if [ -d "$IN" ]; then # if the target is a directory
+    TARGETDIR="${IN%/}"
+
+    # XXX: Original behavior if TARGETDIR is empty (IN resolves to /). I'm
+    # defaulting to dying.
+
+    [[ -z $TARGETDIR ]] && {
+      stderr "Not watching entire file system. $WATCH_ARG resolves to '/'."
+      # XXX: Document these exit values so this makes more sense
+      exit 11
+    }
+
+    # construct inotifywait-commandline
+    if [[ $UNAME == 'Darwin' ]]; then
+      # still need to fix EVENTS since it wants them listed one-by-one
+      INW_ARGS=('--recursive' "$EVENTS" '-E' '--exclude' "'(\.git/|\.git$)'" "'$TARGETDIR'")
+
+    else
+      INW_ARGS=('-qmr' '-e' "$EVENTS" '--exclude' "'(\.git/|\.git$)'" "'$TARGETDIR'")
+    fi
+
+    GIT_ADD_ARGS='--all .' # add "." (CWD) recursively to index
+    # XXX: Was this '-a' removed by accident? or is this comment not needed
+    #      anymore?
+    GIT_COMMIT_ARGS='' # add -a switch to "commit" call just to be sure
+
+  #---------------------------------------------------------------------------
+  elif [ -f "$IN" ]; then # if the target is a single file
+    TARGETDIR="${IN%/*}"
+
+    # construct inotifywait-commandline
+    if [[ $UNAME == 'Darwin' ]]; then
+      INW_ARGS=("$EVENTS" "$IN")
+    else
+      INW_ARGS=('-qm' '-e' "$EVENTS" "$IN")
+    fi
+
+    GIT_ADD_ARGS="$IN" # add only the selected file to index
+    GIT_COMMIT_ARGS='' # no need to add anything more to "commit" call
+
+  #---------------------------------------------------------------------------
+  else
+    stderr "Error: The target is neither a regular file nor a directory."
+    exit 3
+  fi
+
+  #---------------------------------------------------------------------------
+  # If $GIT_DIR is set, add parameters to git command as need be
+
+  [[ -n $GIT_DIR ]] \
+    && GIT="$GIT --no-pager --work-tree $TARGETDIR --git-dir $GIT_DIR"
+}
+
 ###############################################################################
 # Sanity checks
 
@@ -275,53 +333,7 @@ WATCH_ARG="$1"
 ###############################################################################
 
 IN="$(expand_path "$WATCH_ARG")"
-
-#-----------------------------------------------------------------------------
-if [ -d "$IN" ]; then # if the target is a directory
-  TARGETDIR="${IN%/}"
-
-  # XXX: Original behavior if TARGETDIR is empty (IN resolves to /). I'm
-  # defaulting to dying.
-
-  [[ -z $TARGETDIR ]] && {
-    stderr "Not watching entire file system. $WATCH_ARG resolves to '/'."
-    # XXX: Document these exit values so this makes more sense
-    exit 11
-  }
-
-  # construct inotifywait-commandline
-  if [[ $UNAME == 'Darwin' ]]; then
-    # still need to fix EVENTS since it wants them listed one-by-one
-    INW_ARGS=('--recursive' "$EVENTS" '-E' '--exclude' "'(\.git/|\.git$)'" "'$TARGETDIR'")
-
-  else
-    INW_ARGS=('-qmr' '-e' "$EVENTS" '--exclude' "'(\.git/|\.git$)'" "'$TARGETDIR'")
-  fi
-
-  GIT_ADD_ARGS='--all .' # add "." (CWD) recursively to index
-  # XXX: Was this '-a' removed by accident? or is this comment not needed
-  #      anymore?
-  GIT_COMMIT_ARGS='' # add -a switch to "commit" call just to be sure
-
-#-----------------------------------------------------------------------------
-elif [ -f "$IN" ]; then # if the target is a single file
-  TARGETDIR="${IN%/*}"
-
-  # construct inotifywait-commandline
-  if [[ $UNAME == 'Darwin' ]]; then
-    INW_ARGS=("$EVENTS" "$IN")
-  else
-    INW_ARGS=('-qm' '-e' "$EVENTS" "$IN")
-  fi
-
-  GIT_ADD_ARGS="$IN" # add only the selected file to index
-  GIT_COMMIT_ARGS='' # no need to add anything more to "commit" call
-
-#-----------------------------------------------------------------------------
-else
-  stderr "Error: The target is neither a regular file nor a directory."
-  exit 3
-fi
+set_arguments
 
 #-----------------------------------------------------------------------------
 # CD into target directory
@@ -330,12 +342,6 @@ cd "$TARGETDIR" || {
   stderr "Error: Can't change directory to '${TARGETDIR}'."
   exit 5
 }
-
-#-----------------------------------------------------------------------------
-# If $GIT_DIR is set, add parameters to git command as need be
-
-[[ -n $GIT_DIR ]] \
-  && GIT="$GIT --no-pager --work-tree $TARGETDIR --git-dir $GIT_DIR"
 
 #-----------------------------------------------------------------------------
 # Check if commit message needs any formatting (date splicing)
