@@ -2,6 +2,9 @@
 
 # gitwatch - watch file or directory and git commit all changes as they happen
 
+# XXX: Add support for multiple watch directories
+# XXX: Create man page
+
 # Copyright (C) 2013-2018  Patrick Lehner
 #   with modifications and contributions by:
 #   - Matthew McGowan
@@ -9,43 +12,66 @@
 #   - Phil Thompson
 #   - Dave Musicant
 
+# Probably copyrighted through till 2021 PatrickLehner
+#.
+# Alan Young stole this code and made it his own!
+
 #############################################################################
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
 #    the Free Software Foundation, either version 3 of the License, or
 #    (at your option) any later version.
-
+#.
 #    This program is distributed in the hope that it will be useful,
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
-
+#.
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #############################################################################
-
+#.
 #   Idea and original code taken from http://stackoverflow.com/a/965274
 #       original work by Lester Buck
 #       (but heavily modified by now)
+#.
+#   Requires the command 'inotifywait' to be available, which is part of the
+#   inotify-tools (See https://github.com/rvoicilas/inotify-tools ), and
+#   (obviously) git.
+#.
+#   Will check the availability of both commands using the `which` command and
+#   will abort if either command (or `which`) is not found.
 
-#   Requires the command 'inotifywait' to be available, which is part of
-#   the inotify-tools (See https://github.com/rvoicilas/inotify-tools ),
-#   and (obviously) git.
-#   Will check the availability of both commands using the `which` command
-#   and will abort if either command (or `which`) is not found.
+#   The above is incorrect, the 'hash' command is now used to check for the
+#   existence of executables.
 
-REMOTE=""
-BRANCH=""
-SLEEP_TIME=2
-DATE_FMT="+%Y-%m-%d %H:%M:%S"
-COMMITMSG="Scripted auto-commit on change (%d) by gitwatch.sh"
+#-----------------------------------------------------------------------------
+# Setup
+#.
+# Allow environment variables to override defaults, then allow command line
+# arguments to override environment settings.
+
+# XXX: Document these allowed environment variables
+
+BRANCH="${GW_GIT_BRANCH:-}"
+COMMITMSG="${GW_COMMITMSG:-Scripted auto-commit on change (%d) by gitwatch.sh}"
+DATE_FMT="${GW_DATE_FMT:-+%Y-%m-%d %H:%M:%S}"
+EVENTS="${GW_EVENTS:-close_write,move,move_self,delete,create,modify}"
+GIT="${GW_GIT_BIN:-git}"
+GIT_DIR="${GW_GIT_DIR:-}"
+INW="${GW_INW_BIN:-inotifywait}"
 LISTCHANGES=-1
 LISTCHANGES_COLOR="--color=always"
-GIT_DIR=""
+REMOTE="${GW_REMOTE:-}"
+RL="${GW_RL_BIN:-readlink}"
+SLEEP_TIME=2
+UNAME="$(uname)"
 
+#-----------------------------------------------------------------------------
 # Print a message about how to use this script
+
 shelp() {
-  cat << EOH
+  cat << EOH | ${PAGER:-less}
 gitwatch - watch file or directory and git commit all changes as they happen
 
 Usage:
@@ -102,46 +128,56 @@ and will abort with an error if they cannot be found). If you want to use
 binaries that are named differently and/or located outside of your PATH, you
 can define replacements in the environment variables GW_GIT_BIN, GW_INW_BIN,
 and GW_RL_BIN for git, inotifywait, and readline, respectively.
+
+Note: Whichever of -l and -L appear *LAST* in the parameter list will take
+precedence.
 EOH
 
   exit 1
 }
 
+#-----------------------------------------------------------------------------
 # print all arguments to stderr
-stderr() {
-  echo "$@" >&2
-}
 
-# clean up at end of program, killing the remaining sleep process if it still exists
-cleanup() {
-  if [[ -n $SLEEP_PID ]] && kill -0 "$SLEEP_PID" &> /dev/null; then
-    kill "$SLEEP_PID" &> /dev/null
-  fi
-  exit 0
-}
+stderr() { echo "$@" >&2; }
 
+#-----------------------------------------------------------------------------
 # Tests for the availability of a command
-is_command() {
-  hash "$1" 2> /dev/null
+
+is_command() { hash "$1" 2> /dev/null; }
+
+#-----------------------------------------------------------------------------
+# clean up at end of program, killing the remaining sleep process if it still
+# exists
+
+cleanup() {
+  [[ -n $SLEEP_PID ]] \
+    && kill -0 "$SLEEP_PID" &> /dev/null \
+    && kill "$SLEEP_PID" &> /dev/null
+
+  exit 0
 }
 
 ###############################################################################
 
-while getopts b:d:h:g:L:l:m:p:r:s:e: option; do # Process command line options
-  case "${option}" in
+# Process command line options
+while getopts b:d:h:g:L:l:m:p:r:s:e: option; do
+  case "$option" in
     b) BRANCH=${OPTARG} ;;
     d) DATE_FMT=${OPTARG} ;;
-    h) shelp ;;
+    e) EVENTS=${OPTARG} ;;
     g) GIT_DIR=${OPTARG} ;;
+    h) shelp ;;
     l) LISTCHANGES=${OPTARG} ;;
+    m) COMMITMSG=${OPTARG} ;;
+    p | r) REMOTE=${OPTARG} ;;
+    s) SLEEP_TIME=${OPTARG} ;;
+
     L)
       LISTCHANGES=${OPTARG}
       LISTCHANGES_COLOR=""
       ;;
-    m) COMMITMSG=${OPTARG} ;;
-    p | r) REMOTE=${OPTARG} ;;
-    s) SLEEP_TIME=${OPTARG} ;;
-    e) EVENTS=${OPTARG} ;;
+
     *)
       stderr "Error: Option '${option}' does not exist."
       shelp
@@ -149,33 +185,29 @@ while getopts b:d:h:g:L:l:m:p:r:s:e: option; do # Process command line options
   esac
 done
 
-shift $((OPTIND - 1)) # Shift the input arguments, so that the input file (last arg) is $1 in the code below
+# Shift the input arguments, so that the input file (last arg) is $1 in the
+# code below
 
-if [ $# -ne 1 ]; then # If no command line arguments are left (that's bad: no target was passed)
-  shelp               # print usage help and exit
+shift $((OPTIND - 1))
+
+# If no command line arguments are left (that's bad; no target was passed, or
+# too many arguments were passed) print usage help and exit
+
+[[ $# -ne 1 ]] && shelp
+
+#-----------------------------------------------------------------------------
+# if custom bin names are given for git, inotifywait, or readlink, use those;
+# otherwise fall back to "git", "inotifywait", and "readlink"
+
+# if Mac, use fswatch
+if [[ $UNAME == 'Darwin' ]]; then
+  INW="fswatch"
+  # default events specified via a mask, see
+  # https://emcrisostomo.github.io/fswatch/doc/1.14.0/fswatch.html/Invoking-fswatch.html#Numeric-Event-Flags
+  # default of 414 = MovedTo + MovedFrom + Renamed + Removed + Updated + Created
+  #                = 256 + 128+ 16 + 8 + 4 + 2
+  EVENTS="${EVENTS:---event=414}"
 fi
-
-# if custom bin names are given for git, inotifywait, or readlink, use those; otherwise fall back to "git", "inotifywait", and "readlink"
-if [ -z "$GW_GIT_BIN" ]; then GIT="git"; else GIT="$GW_GIT_BIN"; fi
-
-if [ -z "$GW_INW_BIN" ]; then
-  # if Mac, use fswatch
-  if [ "$(uname)" != "Darwin" ]; then
-    INW="inotifywait"
-    EVENTS="${EVENTS:-close_write,move,move_self,delete,create,modify}"
-  else
-    INW="fswatch"
-    # default events specified via a mask, see
-    # https://emcrisostomo.github.io/fswatch/doc/1.14.0/fswatch.html/Invoking-fswatch.html#Numeric-Event-Flags
-    # default of 414 = MovedTo + MovedFrom + Renamed + Removed + Updated + Created
-    #                = 256 + 128+ 16 + 8 + 4 + 2
-    EVENTS="${EVENTS:---event=414}"
-  fi
-else
-  INW="$GW_INW_BIN"
-fi
-
-if [ -z "$GW_RL_BIN" ]; then RL="readlink"; else RL="$GW_RL_BIN"; fi
 
 # Check availability of selected binaries and die if not met
 for cmd in "$GIT" "$INW"; do
