@@ -84,6 +84,8 @@ SLEEP_PID=
 SLEEP_TIME=2
 UNAME="$(uname)"
 
+decclare -a INW_ARGS
+
 #############################################################################
 # Functions
 
@@ -207,6 +209,8 @@ set_arguments() {
   local watch_path
   watch_path="$(expand_path "$watch")"
 
+  INW_ARGS=()
+
   #---------------------------------------------------------------------------
   if [ -d "$watch_path" ]; then # if the target is a directory
     watch_dir="${watch_path%/}"
@@ -222,17 +226,21 @@ set_arguments() {
 
     # construct inotifywait-commandline
     if [[ $UNAME == 'Darwin' ]]; then
-      # still need to fix EVENTS since it wants them listed one-by-one
-      INW_ARGS=('--recursive' "$EVENTS" '-E' '--exclude' "'(\.git/|\.git$)'" "'$watch_dir'")
+      # XXX: still need to fix EVENTS since it wants them listed one-by-one
+      INW_ARGS+=('--recursive')
+      INW_ARGS+=("$EVENTS")
+      INW_ARGS+=('-E')
+      INW_ARGS+=('--exclude' "'(\.git/|\.git$)'")
+      INW_ARGS+=("'$watch_dir'")
 
     else
-      INW_ARGS=('-qmr' '-e' "$EVENTS" '--exclude' "'(\.git/|\.git$)'" "'$watch_dir'")
+      INW_ARGS+=('--quiet' '--monitor' '--recursive')
+      INW_ARGS+=('--event' "$EVENTS")
+      INW_ARGS+=('--exclude' "'(\.git/|\.git$)'")
+      INW_ARGS+=("'$watch_dir'")
     fi
 
     GIT_ADD_ARGS='--all .' # add "." (CWD) recursively to index
-    # XXX: Was this '-a' removed by accident? or is this comment not needed
-    #      anymore?
-    GIT_COMMIT_ARGS='' # add -a switch to "commit" call just to be sure
 
   #---------------------------------------------------------------------------
   elif [ -f "$watch_path" ]; then # if the target is a single file
@@ -240,13 +248,16 @@ set_arguments() {
 
     # construct inotifywait-commandline
     if [[ $UNAME == 'Darwin' ]]; then
-      INW_ARGS=("$EVENTS" "$watch_path")
+      INW_ARGS+=("$EVENTS")
+      INW_ARGS+=("$watch_path")
+
     else
-      INW_ARGS=('-qm' '-e' "$EVENTS" "$watch_path")
+      INW_ARGS+=('--quiet' '--monitor')
+      INW_ARGS+=('--events' "$EVENTS")
+      INW_ARGS+=("$watch_path")
     fi
 
     GIT_ADD_ARGS="$watch_path" # add only the selected file to index
-    GIT_COMMIT_ARGS=''         # no need to add anything more to "commit" call
 
   #---------------------------------------------------------------------------
   else
@@ -443,7 +454,7 @@ fi
 
 # XXX: GAH! No! Bad dev for using eval! Fix!
 
-eval "$INW" "${INW_ARGS[@]}" | while read -r line; do
+eval $INW "${INW_ARGS[@]}" | while read -r line; do
   # is there already a timeout process running?
   if [[ -n $SLEEP_PID ]] && kill -0 "$SLEEP_PID" &> /dev/null; then
     # kill it and wait for completion
@@ -473,7 +484,6 @@ eval "$INW" "${INW_ARGS[@]}" | while read -r line; do
         # Use git diff as the commit msg, unless if files were added or deleted but not modified
         if [ -n "$DIFF_COMMITMSG" ]; then
           FORMATTED_COMMITMSG="$DIFF_COMMITMSG"
-
         else
           FORMATTED_COMMITMSG="New files added: $($GIT status -s)"
         fi
@@ -486,12 +496,10 @@ eval "$INW" "${INW_ARGS[@]}" | while read -r line; do
     STATUS=$($GIT status -s)
 
     if [ -n "$STATUS" ]; then # only commit if status shows tracked changes.
-      # We want GIT_ADD_ARGS and GIT_COMMIT_ARGS to be word splitted
+      # We want GIT_ADD_ARGS to be word splitted
       # shellcheck disable=SC2086
       $GIT add $GIT_ADD_ARGS # add file(s) to index
-
-      # shellcheck disable=SC2086
-      $GIT commit $GIT_COMMIT_ARGS -m"$FORMATTED_COMMITMSG" # construct commit message and commit
+      $GIT commit -m "$FORMATTED_COMMITMSG"
 
       push_cmd
     fi
