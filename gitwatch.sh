@@ -235,10 +235,28 @@ set_arguments() {
   fi
 
   #---------------------------------------------------------------------------
-  # If $GIT_DIR is set, add parameters to git command as need be
+  # If GW_GIT_DIR is set, verify that it is a directory and set git command
+  # XXX: Add validation that it is actually a .git dir.
 
-  [[ -n $GIT_DIR ]] \
-    && GIT="$GIT --no-pager --work-tree $TARGETDIR --git-dir $GIT_DIR"
+  [[ -z $GIT_DIR ]] && GIT_DIR="${GW_GIT_DIR:-}"
+
+  if [[ -n $GIT_DIR ]]; then
+    if [[ ! -d $GIT_DIR ]]; then
+      stderr ".git location is not a directory: $GIT_DIR"
+      exit 4
+    fi
+
+    [[ -n $GIT_DIR ]] \
+      && GIT="$GIT --no-pager --work-tree $TARGETDIR --git-dir $GIT_DIR"
+  fi
+
+  #---------------------------------------------------------------------------
+  # CD into target directory
+
+  cd "$TARGETDIR" || {
+    stderr "Error: Can't change directory to '$TARGETDIR'."
+    exit 5
+  }
 }
 
 #-----------------------------------------------------------------------------
@@ -312,20 +330,6 @@ push_cmd() {
 
 ###############################################################################
 # Sanity checks
-
-#-----------------------------------------------------------------------------
-# If GW_GIT_DIR is set, verify that it is a directory
-# XXX: Add validation that it is actually a .git dir.
-
-if [[ -n $GW_GIT_DIR ]]; then
-  if [[ -d $GIT_DIR ]]; then
-    GIT_DIR="$GW_GIT_DIR"
-
-  else
-    stderr ".git location is not a directory: $GIT_DIR"
-    exit 4
-  fi
-fi
 
 #-----------------------------------------------------------------------------
 # If custom bin names are given for git, inotifywait, or readlink, use those;
@@ -402,15 +406,6 @@ WATCH_ARG="$1"
 
 IN="$(expand_path "$WATCH_ARG")"
 set_arguments
-
-#-----------------------------------------------------------------------------
-# CD into target directory
-# XXX: Move this into set_arguments?
-
-cd "$TARGETDIR" || {
-  stderr "Error: Can't change directory to '${TARGETDIR}'."
-  exit 5
-}
 
 #-----------------------------------------------------------------------------
 # Check if commit message needs any formatting (date splicing)
