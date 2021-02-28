@@ -242,19 +242,11 @@ WATCH_ARG="$1"
 ###############################################################################
 
 # Expand the path to the target to absolute path
-if [ "$(uname)" != "Darwin" ]; then
-  IN=$($RL -f "$WATCH_ARG")
-else
-  if is_command "greadlink"; then
-    IN=$(greadlink -f "$WATCH_ARG")
-  else
-    IN=$($RL -f "$WATCH_ARG")
-    if [ $? -eq 1 ]; then
-      echo "Seems like your readlink doesn't support '-f'. Running without. Please 'brew install coreutils'."
-      IN=$($RL "$WATCH_ARG")
-    fi
-  fi
-fi
+IN=$($RL -f "$WATCH_ARG") || {
+  echo "Seems like your readlink doesn't support '-f'. Running without."
+  [[ $UNAME == 'Darwin' ]] && echo "Please 'brew install coreutils'."
+  IN=$($RL "$WATCH_ARG")
+}
 
 if [ -d "$IN" ]; then # if the target is a directory
 
