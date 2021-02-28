@@ -242,6 +242,46 @@ set_arguments() {
     && GIT="$GIT --no-pager --work-tree $TARGETDIR --git-dir $GIT_DIR"
 }
 
+#-----------------------------------------------------------------------------
+# A function to reduce git diff output to the actual changed content, and
+# insert file line numbers.  Based on
+# "https://stackoverflow.com/a/12179492/199142" by John Mellor
+
+diff-lines() {
+  local path=
+  local line=
+  local previous_path=
+
+  while read -r; do
+    esc=$'\033'
+
+    if [[ $REPLY =~ ---\ (a/)?([^[:blank:]$esc]+).* ]]; then
+      previous_path=${BASH_REMATCH[2]}
+      continue
+
+    elif [[ $REPLY =~ \+\+\+\ (b/)?([^[:blank:]$esc]+).* ]]; then
+      path=${BASH_REMATCH[2]}
+
+    elif [[ $REPLY =~ @@\ -[0-9]+(,[0-9]+)?\ \+([0-9]+)(,[0-9]+)?\ @@.* ]]; then
+      line=${BASH_REMATCH[2]}
+
+    elif [[ $REPLY =~ ^($esc\[[0-9;]+m)*([\ +-]) ]]; then
+      REPLY=${REPLY:0:150} # limit the line width, so it fits in a single line in most git log outputs
+
+      if [[ $path == "/dev/null" ]]; then
+        echo "File $previous_path deleted or moved."
+        continue
+
+      else
+        echo "$path:$line: $REPLY"
+      fi
+
+      if [[ ${BASH_REMATCH[2]} != - ]]; then
+        ((line++))
+      fi
+    fi
+  done
+}
 ###############################################################################
 # Sanity checks
 
@@ -369,45 +409,6 @@ if [[ -n $REMOTE ]]; then        # are we pushing to a remote?
   fi
 fi
 
-#-----------------------------------------------------------------------------
-# A function to reduce git diff output to the actual changed content, and insert file line numbers.
-# Based on "https://stackoverflow.com/a/12179492/199142" by John Mellor
-
-diff-lines() {
-  local path=
-  local line=
-  local previous_path=
-
-  while read -r; do
-    esc=$'\033'
-
-    if [[ $REPLY =~ ---\ (a/)?([^[:blank:]$esc]+).* ]]; then
-      previous_path=${BASH_REMATCH[2]}
-      continue
-
-    elif [[ $REPLY =~ \+\+\+\ (b/)?([^[:blank:]$esc]+).* ]]; then
-      path=${BASH_REMATCH[2]}
-
-    elif [[ $REPLY =~ @@\ -[0-9]+(,[0-9]+)?\ \+([0-9]+)(,[0-9]+)?\ @@.* ]]; then
-      line=${BASH_REMATCH[2]}
-
-    elif [[ $REPLY =~ ^($esc\[[0-9;]+m)*([\ +-]) ]]; then
-      REPLY=${REPLY:0:150} # limit the line width, so it fits in a single line in most git log outputs
-
-      if [[ $path == "/dev/null" ]]; then
-        echo "File $previous_path deleted or moved."
-        continue
-
-      else
-        echo "$path:$line: $REPLY"
-      fi
-
-      if [[ ${BASH_REMATCH[2]} != - ]]; then
-        ((line++))
-      fi
-    fi
-  done
-}
 
 ###############################################################################
 
