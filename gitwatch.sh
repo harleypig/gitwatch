@@ -45,63 +45,66 @@ GIT_DIR=""
 
 # Print a message about how to use this script
 shelp() {
-  echo "gitwatch - watch file or directory and git commit all changes as they happen"
-  echo ""
-  echo "Usage:"
-  echo "${0##*/} [-s <secs>] [-d <fmt>] [-r <remote> [-b <branch>]]"
-  echo "          [-m <msg>] [-l|-L <lines>] <target>"
-  echo ""
-  echo "Where <target> is the file or folder which should be watched. The target needs"
-  echo "to be in a Git repository, or in the case of a folder, it may also be the top"
-  echo "folder of the repo."
-  echo ""
-  echo " -s <secs>        After detecting a change to the watched file or directory,"
-  echo "                  wait <secs> seconds until committing, to allow for more"
-  echo "                  write actions of the same batch to finish; default is 2sec"
-  echo " -d <fmt>         The format string used for the timestamp in the commit"
-  echo "                  message; see 'man date' for details; default is "
-  echo '                  "+%Y-%m-%d %H:%M:%S"'
-  echo " -r <remote>      If given and non-empty, a 'git push' to the given <remote>"
-  echo "                  is done after every commit; default is empty, i.e. no push"
-  echo " -b <branch>      The branch which should be pushed automatically;"
-  echo "                - if not given, the push command used is  'git push <remote>',"
-  echo "                    thus doing a default push (see git man pages for details)"
-  echo "                - if given and"
-  echo "                  + repo is in a detached HEAD state (at launch)"
-  echo "                    then the command used is  'git push <remote> <branch>'"
-  echo "                  + repo is NOT in a detached HEAD state (at launch)"
-  echo "                    then the command used is"
-  echo "                    'git push <remote> <current branch>:<branch>'  where"
-  echo "                    <current branch> is the target of HEAD (at launch)"
-  echo "                  if no remote was defined with -r, this option has no effect"
-  echo " -g <path>        Location of the .git directory, if stored elsewhere in"
-  echo "                  a remote location. This specifies the --git-dir parameter"
-  echo " -l <lines>       Log the actual changes made in this commit, up to a given"
-  echo "                  number of lines, or all lines if 0 is given"
-  echo " -L <lines>       Same as -l but without colored formatting"
-  echo " -m <msg>         The commit message used for each commit; all occurrences of"
-  echo "                  %d in the string will be replaced by the formatted date/time"
-  echo "                  (unless the <fmt> specified by -d is empty, in which case %d"
-  echo "                  is replaced by an empty string); the default message is:"
-  echo '                  "Scripted auto-commit on change (%d) by gitwatch.sh"'
-  echo " -e <events>      Events passed to inotifywait to watch (defaults to "
-  echo "                  '$EVENTS')"
-  echo "                  (useful when using inotify-win, e.g. -e modify,delete,move)"
-  echo "                  (currently ignored on Mac, which only uses default values)"
-  echo ""
-  echo "As indicated, several conditions are only checked once at launch of the"
-  echo "script. You can make changes to the repo state and configurations even while"
-  echo "the script is running, but that may lead to undefined and unpredictable (even"
-  echo "destructive) behavior!"
-  echo "It is therefore recommended to terminate the script before changing the repo's"
-  echo "config and restarting it afterwards."
-  echo ""
-  echo 'By default, gitwatch tries to use the binaries "git", "inotifywait", and'
-  echo "\"readline\", expecting to find them in the PATH (it uses 'which' to check this"
-  echo "and will abort with an error if they cannot be found). If you want to use"
-  echo "binaries that are named differently and/or located outside of your PATH, you can"
-  echo "define replacements in the environment variables GW_GIT_BIN, GW_INW_BIN, and"
-  echo "GW_RL_BIN for git, inotifywait, and readline, respectively."
+  cat << EOH
+gitwatch - watch file or directory and git commit all changes as they happen
+
+Usage:
+${0##*/} [-s <secs>] [-d <fmt>] [-r <remote> [-b <branch>]]
+         [-m <msg>] [-l|-L <lines>] <target>
+
+Where <target> is the file or folder which should be watched. The target needs
+to be in a Git repository, or in the case of a folder, it may also be the top
+folder of the repo.
+
+ -s <secs>        After detecting a change to the watched file or directory,
+                  wait <secs> seconds until committing, to allow for more
+                  write actions of the same batch to finish; default is 2sec
+ -d <fmt>         The format string used for the timestamp in the commit
+                  message; see 'man date' for details
+                  (default is "+%Y-%m-%d %H:%M:%S")
+ -r <remote>      If given and non-empty, a 'git push' to the given <remote>
+                  is done after every commit; default is empty, i.e. no push
+ -b <branch>      The branch which should be pushed automatically;
+                  - if not given, the push command used is 'git push
+                    <remote>', thus doing a default push (see git man pages
+                    for details)
+                  - if given and repo is in a detached HEAD state (at launch)
+                    then the command used is 'git push <remote> <branch>' repo
+                    is NOT in a detached HEAD state (at launch) then the
+                    command used is 'git push <remote> <current
+                    branch>:<branch>' where <current branch> is the target of
+                    HEAD (at launch) if no remote was defined with -r, this
+                    option has no effect
+ -g <path>        Location of the .git directory, if stored elsewhere in
+                  a remote location. This specifies the --git-dir parameter
+ -l <lines>       Log the actual changes made in this commit, up to a given
+                  number of lines, or all lines if 0 is given
+ -L <lines>       Same as -l but without colored formatting
+ -m <msg>         The commit message used for each commit; all occurrences of
+                  %d in the string will be replaced by the formatted date/time
+                  (unless the <fmt> specified by -d is empty, in which case %d
+                  is replaced by an empty string); the default message is:
+                  "Scripted auto-commit on change (%d) by gitwatch.sh"
+ -e <events>      Events passed to inotifywait to watch (useful when using
+                  inotify-win, e.g. -e modify,delete,move)
+                  (defaults to '$EVENTS')
+                  (currently ignored on Mac, which only uses default values)
+
+As indicated, several conditions are only checked once at launch of the
+script. You can make changes to the repo state and configurations even while
+the script is running, but that may lead to undefined and unpredictable (even
+destructive) behavior!  It is therefore recommended to terminate the script
+before changing the repo's config and restarting it afterwards.
+
+By default, gitwatch tries to use the binaries "git", "inotifywait", and
+"readline", expecting to find them in the PATH (it uses 'which' to check this
+and will abort with an error if they cannot be found). If you want to use
+binaries that are named differently and/or located outside of your PATH, you
+can define replacements in the environment variables GW_GIT_BIN, GW_INW_BIN,
+and GW_RL_BIN for git, inotifywait, and readline, respectively.
+EOH
+
+  exit 1
 }
 
 # print all arguments to stderr
@@ -128,10 +131,7 @@ while getopts b:d:h:g:L:l:m:p:r:s:e: option; do # Process command line options
   case "${option}" in
     b) BRANCH=${OPTARG} ;;
     d) DATE_FMT=${OPTARG} ;;
-    h)
-      shelp
-      exit
-      ;;
+    h) shelp ;;
     g) GIT_DIR=${OPTARG} ;;
     l) LISTCHANGES=${OPTARG} ;;
     L)
@@ -145,7 +145,6 @@ while getopts b:d:h:g:L:l:m:p:r:s:e: option; do # Process command line options
     *)
       stderr "Error: Option '${option}' does not exist."
       shelp
-      exit 1
       ;;
   esac
 done
@@ -153,8 +152,7 @@ done
 shift $((OPTIND - 1)) # Shift the input arguments, so that the input file (last arg) is $1 in the code below
 
 if [ $# -ne 1 ]; then # If no command line arguments are left (that's bad: no target was passed)
-  shelp               # print usage help
-  exit                # and exit
+  shelp               # print usage help and exit
 fi
 
 # if custom bin names are given for git, inotifywait, or readlink, use those; otherwise fall back to "git", "inotifywait", and "readlink"
