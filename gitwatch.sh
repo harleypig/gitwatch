@@ -6,6 +6,8 @@
 # XXX: Can we use git -C instead of changing to the directory ourselves?
 # XXX: Create man page
 # XXX: Add bash coverage
+#      github actions:
+#      https://about.codecov.io/blog/how-to-get-coverage-metrics-for-bash-scripts/
 
 # Copyright (C) 2013-2018  Patrick Lehner
 #   with modifications and contributions by:
