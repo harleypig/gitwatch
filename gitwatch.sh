@@ -64,6 +64,7 @@ LISTCHANGES=-1
 LISTCHANGES_COLOR="--color=always"
 REMOTE="${GW_REMOTE:-}"
 RL="${GW_RL_BIN:-readlink}"
+SLEEP_PID=
 SLEEP_TIME=2
 UNAME="$(uname)"
 
@@ -158,6 +159,8 @@ cleanup() {
   exit 0
 }
 
+trap "cleanup" EXIT # make sure the timeout is killed when exiting script
+
 ###############################################################################
 
 # Process command line options
@@ -195,6 +198,8 @@ shift $((OPTIND - 1))
 
 [[ $# -ne 1 ]] && shelp
 
+WATCH_ARG="$1"
+
 #-----------------------------------------------------------------------------
 # if custom bin names are given for git, inotifywait, or readlink, use those;
 # otherwise fall back to "git", "inotifywait", and "readlink"
@@ -220,26 +225,22 @@ unset cmd
 
 ###############################################################################
 
-SLEEP_PID="" # pid of timeout subprocess
-
-trap "cleanup" EXIT # make sure the timeout is killed when exiting script
-
 # Expand the path to the target to absolute path
 if [ "$(uname)" != "Darwin" ]; then
-  IN=$($RL -f "$1")
+  IN=$($RL -f "$WATCH_ARG")
 else
   if is_command "greadlink"; then
-    IN=$(greadlink -f "$1")
+    IN=$(greadlink -f "WATCH_ARG")
   else
-    IN=$($RL -f "$1")
+    IN=$($RL -f "WATCH_ARG")
     if [ $? -eq 1 ]; then
       echo "Seems like your readlink doesn't support '-f'. Running without. Please 'brew install coreutils'."
-      IN=$($RL "$1")
+      IN=$($RL "$WATCH_ARG")
     fi
   fi
 fi
 
-if [ -d "$1" ]; then # if the target is a directory
+if [ -d "$IN" ]; then # if the target is a directory
 
   TARGETDIR=$(sed -e "s/\/*$//" <<< "$IN") # dir to CD into before using git commands: trim trailing slash, if any
   # construct inotifywait-commandline
@@ -252,7 +253,7 @@ if [ -d "$1" ]; then # if the target is a directory
   GIT_ADD_ARGS="--all ." # add "." (CWD) recursively to index
   GIT_COMMIT_ARGS=""     # add -a switch to "commit" call just to be sure
 
-elif [ -f "$1" ]; then # if the target is a single file
+elif [ -f "$IN" ]; then # if the target is a single file
 
   TARGETDIR=$(dirname "$IN") # dir to CD into before using git commands: extract from file name
   # construct inotifywait-commandline
