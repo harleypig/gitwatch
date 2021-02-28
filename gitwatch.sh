@@ -62,6 +62,15 @@
 # arguments to override environment settings.
 
 # XXX: Document these allowed environment variables
+# GW_COMMITMSG
+# GW_DATE_FMT
+# GW_EVENTS
+# GW_GIT_BIN
+# GW_GIT_BRANCH
+# GW_GIT_DIR
+# GW_INW_BIN
+# GW_REMOTE
+# GW_RL_BIN
 
 COMMITMSG="${GW_COMMITMSG:-Scripted auto-commit on change (%d) by gitwatch.sh}"
 DATE_FMT="${GW_DATE_FMT:-+%Y-%m-%d %H:%M:%S}"
@@ -127,12 +136,13 @@ folder of the repo.
                     <remote>', thus doing a default push (see git man pages
                     for details)
                   - if given and repo is in a detached HEAD state (at launch)
-                    then the command used is 'git push <remote> <branch>' repo
-                    is NOT in a detached HEAD state (at launch) then the
-                    command used is 'git push <remote> <current
-                    branch>:<branch>' where <current branch> is the target of
-                    HEAD (at launch) if no remote was defined with -r, this
-                    option has no effect
+                    then the command used is 'git push <remote> <branch>'
+                  - if given and repo is NOT in a detached HEAD state (at
+                    launch) then the command used is 'git push <remote>
+                    <current branch>:<branch>' where <current branch> is the
+                    target of HEAD (at launch)
+                  - if no remote was defined with -r, this option has no
+                    effect
  -g <path>        Location of the .git directory, if stored elsewhere in
                   a remote location. This specifies the --git-dir parameter
  -l <lines>       Log the actual changes made in this commit, up to a given
@@ -162,7 +172,7 @@ can define replacements in the environment variables GW_GIT_BIN, GW_INW_BIN,
 and GW_RL_BIN for git, inotifywait, and readline, respectively.
 
 Note: Whichever of -l and -L appear *LAST* in the parameter list will take
-precedence.
+      precedence.
 EOH
 
   exit 1
@@ -189,6 +199,10 @@ expand_path() {
 # Set TARGETDIR, inotifywait and git arguments
 
 set_arguments() {
+  local watch="$1"
+  local IN
+  IN="$(expand_path "$watch")"
+
   #---------------------------------------------------------------------------
   if [ -d "$IN" ]; then # if the target is a directory
     TARGETDIR="${IN%/}"
@@ -197,7 +211,7 @@ set_arguments() {
     # defaulting to dying.
 
     [[ -z $TARGETDIR ]] && {
-      stderr "Not watching entire file system. $WATCH_ARG resolves to '/'."
+      stderr "Not watching entire file system. $WATCH resolves to '/'."
       # XXX: Document these exit values so this makes more sense
       exit 11
     }
@@ -350,6 +364,7 @@ if [[ $UNAME == 'Darwin' ]]; then
   # https://emcrisostomo.github.io/fswatch/doc/1.14.0/fswatch.html/Invoking-fswatch.html#Numeric-Event-Flags
   # default of 414 = MovedTo + MovedFrom + Renamed + Removed + Updated + Created
   #                = 256 + 128+ 16 + 8 + 4 + 2
+  # XXX: The help is incorrect, EVENT is *not* ignored by default for mac. Fix.
   EVENTS="${GW_EVENTS:---event=414}"
 
 else
@@ -400,14 +415,13 @@ shift $((OPTIND - 1))
 # If no command line arguments are left (that's bad; no target was passed, or
 # too many arguments were passed) print usage help and exit
 
-[[ $# -ne 1 ]] && shelp
-
-WATCH_ARG="$1"
+WATCH="$1"
+[[ -z $WATCH ]] && WATCH="${WATCH:-$GW_WATCH}"
+[[ -z $WATCH ]] && shelp
 
 ###############################################################################
 
-IN="$(expand_path "$WATCH_ARG")"
-set_arguments
+set_arguments "$WATCH"
 
 #-----------------------------------------------------------------------------
 # Check if commit message needs any formatting (date splicing)
