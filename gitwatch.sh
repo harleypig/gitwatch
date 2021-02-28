@@ -12,10 +12,6 @@
 #   - Phil Thompson
 #   - Dave Musicant
 
-# Probably copyrighted through till 2021 PatrickLehner
-#.
-# Alan Young stole this code and made it his own!
-
 #############################################################################
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -45,6 +41,16 @@
 #   The above is incorrect, the 'hash' command is now used to check for the
 #   existence of executables.
 
+#############################################################################
+# Probably copyrighted through till 2021 PatrickLehner
+#.
+# Alan Young stole this code and made it his own!
+#.
+# I refactored this using the mantra 'die early, die often'. I also added
+# separator lines and otherwise made the formatting fit my preferences.
+#.
+#############################################################################
+
 #-----------------------------------------------------------------------------
 # Setup
 #.
@@ -57,16 +63,17 @@ BRANCH="${GW_GIT_BRANCH:-}"
 COMMITMSG="${GW_COMMITMSG:-Scripted auto-commit on change (%d) by gitwatch.sh}"
 DATE_FMT="${GW_DATE_FMT:-+%Y-%m-%d %H:%M:%S}"
 EVENTS="${GW_EVENTS:-close_write,move,move_self,delete,create,modify}"
-GIT="${GW_GIT_BIN:-git}"
 GIT_DIR="${GW_GIT_DIR:-}"
-INW="${GW_INW_BIN:-inotifywait}"
+REMOTE="${GW_REMOTE:-}"
+
 LISTCHANGES=-1
 LISTCHANGES_COLOR="--color=always"
-REMOTE="${GW_REMOTE:-}"
-RL="${GW_RL_BIN:-readlink}"
 SLEEP_PID=
 SLEEP_TIME=2
 UNAME="$(uname)"
+
+#############################################################################
+# Functions
 
 #-----------------------------------------------------------------------------
 # Print a message about how to use this script
@@ -88,7 +95,7 @@ folder of the repo.
                   write actions of the same batch to finish; default is 2sec
  -d <fmt>         The format string used for the timestamp in the commit
                   message; see 'man date' for details
-                  (default is "+%Y-%m-%d %H:%M:%S")
+                  (default is '$DATE_FMT')
  -r <remote>      If given and non-empty, a 'git push' to the given <remote>
                   is done after every commit; default is empty, i.e. no push
  -b <branch>      The branch which should be pushed automatically;
@@ -162,8 +169,40 @@ cleanup() {
 trap "cleanup" EXIT # make sure the timeout is killed when exiting script
 
 ###############################################################################
+# Sanity checks
 
+#-----------------------------------------------------------------------------
+# If custom bin names are given for git, inotifywait, or readlink, use those;
+# otherwise fall back to "git", "inotifywait", and "readlink"
+
+GIT="${GW_GIT_BIN:-git}"
+RL="${GW_RL_BIN:-readlink}"
+INW="${GW_INW_BIN:-inotifywait}"
+
+# if Mac, change some settings
+if [[ $UNAME == 'Darwin' ]]; then
+  [[ -z $GW_INW_BIN ]] && INW="fswatch"
+  [[ -z $GW_RL_BIN ]] && is_command 'greadlink' && RL='greadlink'
+
+  # default events specified via a mask, see
+  # https://emcrisostomo.github.io/fswatch/doc/1.14.0/fswatch.html/Invoking-fswatch.html#Numeric-Event-Flags
+  # default of 414 = MovedTo + MovedFrom + Renamed + Removed + Updated + Created
+  #                = 256 + 128+ 16 + 8 + 4 + 2
+  EVENTS="${EVENTS:---event=414}"
+fi
+
+# Check availability of selected binaries and die if not met
+for cmd in "$GIT" "$INW" "$RL"; do
+  is_command "$cmd" || {
+    stderr "Error: Required command '$cmd' not found."
+    exit 2
+  }
+done
+unset cmd
+
+###############################################################################
 # Process command line options
+
 while getopts b:d:h:g:L:l:m:p:r:s:e: option; do
   case "$option" in
     b) BRANCH=${OPTARG} ;;
@@ -200,29 +239,6 @@ shift $((OPTIND - 1))
 
 WATCH_ARG="$1"
 
-#-----------------------------------------------------------------------------
-# if custom bin names are given for git, inotifywait, or readlink, use those;
-# otherwise fall back to "git", "inotifywait", and "readlink"
-
-# if Mac, use fswatch
-if [[ $UNAME == 'Darwin' ]]; then
-  INW="fswatch"
-  # default events specified via a mask, see
-  # https://emcrisostomo.github.io/fswatch/doc/1.14.0/fswatch.html/Invoking-fswatch.html#Numeric-Event-Flags
-  # default of 414 = MovedTo + MovedFrom + Renamed + Removed + Updated + Created
-  #                = 256 + 128+ 16 + 8 + 4 + 2
-  EVENTS="${EVENTS:---event=414}"
-fi
-
-# Check availability of selected binaries and die if not met
-for cmd in "$GIT" "$INW"; do
-  is_command "$cmd" || {
-    stderr "Error: Required command '$cmd' not found."
-    exit 2
-  }
-done
-unset cmd
-
 ###############################################################################
 
 # Expand the path to the target to absolute path
@@ -230,9 +246,9 @@ if [ "$(uname)" != "Darwin" ]; then
   IN=$($RL -f "$WATCH_ARG")
 else
   if is_command "greadlink"; then
-    IN=$(greadlink -f "WATCH_ARG")
+    IN=$(greadlink -f "$WATCH_ARG")
   else
-    IN=$($RL -f "WATCH_ARG")
+    IN=$($RL -f "$WATCH_ARG")
     if [ $? -eq 1 ]; then
       echo "Seems like your readlink doesn't support '-f'. Running without. Please 'brew install coreutils'."
       IN=$($RL "$WATCH_ARG")
