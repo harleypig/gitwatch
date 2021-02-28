@@ -8,6 +8,8 @@
 # XXX: Add bash coverage
 #      github actions:
 #      https://about.codecov.io/blog/how-to-get-coverage-metrics-for-bash-scripts/
+# XXX: add die function
+# XXX: change stderr to warn
 
 # Copyright (C) 2013-2018  Patrick Lehner
 #   with modifications and contributions by:
@@ -196,22 +198,23 @@ expand_path() {
 }
 
 #-----------------------------------------------------------------------------
-# Set TARGETDIR, inotifywait and git arguments
+# Set inotifywait and git arguments and change to the target directory.
 
 set_arguments() {
   local watch="$1"
-  local IN
-  IN="$(expand_path "$watch")"
+
+  local watch_path
+  watch_path="$(expand_path "$watch")"
 
   #---------------------------------------------------------------------------
-  if [ -d "$IN" ]; then # if the target is a directory
-    TARGETDIR="${IN%/}"
+  if [ -d "$watch_path" ]; then # if the target is a directory
+    watch_dir="${watch_path%/}"
 
-    # XXX: Original behavior if TARGETDIR is empty (IN resolves to /). I'm
-    # defaulting to dying.
+    # XXX: Original behavior if watch_dir is empty ('watch' resolves to /).
+    # I'm defaulting to dying. Need to document.
 
-    [[ -z $TARGETDIR ]] && {
-      stderr "Not watching entire file system. $WATCH resolves to '/'."
+    [[ -z $watch_dir ]] && {
+      stderr "Not watching entire file system. $watch resolves to '/'."
       # XXX: Document these exit values so this makes more sense
       exit 11
     }
@@ -219,10 +222,10 @@ set_arguments() {
     # construct inotifywait-commandline
     if [[ $UNAME == 'Darwin' ]]; then
       # still need to fix EVENTS since it wants them listed one-by-one
-      INW_ARGS=('--recursive' "$EVENTS" '-E' '--exclude' "'(\.git/|\.git$)'" "'$TARGETDIR'")
+      INW_ARGS=('--recursive' "$EVENTS" '-E' '--exclude' "'(\.git/|\.git$)'" "'$watch_dir'")
 
     else
-      INW_ARGS=('-qmr' '-e' "$EVENTS" '--exclude' "'(\.git/|\.git$)'" "'$TARGETDIR'")
+      INW_ARGS=('-qmr' '-e' "$EVENTS" '--exclude' "'(\.git/|\.git$)'" "'$watch_dir'")
     fi
 
     GIT_ADD_ARGS='--all .' # add "." (CWD) recursively to index
@@ -231,17 +234,17 @@ set_arguments() {
     GIT_COMMIT_ARGS='' # add -a switch to "commit" call just to be sure
 
   #---------------------------------------------------------------------------
-  elif [ -f "$IN" ]; then # if the target is a single file
-    TARGETDIR="${IN%/*}"
+  elif [ -f "$watch_path" ]; then # if the target is a single file
+    watch_dir="${watch_path%/*}"
 
     # construct inotifywait-commandline
     if [[ $UNAME == 'Darwin' ]]; then
-      INW_ARGS=("$EVENTS" "$IN")
+      INW_ARGS=("$EVENTS" "$watch_path")
     else
-      INW_ARGS=('-qm' '-e' "$EVENTS" "$IN")
+      INW_ARGS=('-qm' '-e' "$EVENTS" "$watch_path")
     fi
 
-    GIT_ADD_ARGS="$IN" # add only the selected file to index
+    GIT_ADD_ARGS="$watch_path" # add only the selected file to index
     GIT_COMMIT_ARGS='' # no need to add anything more to "commit" call
 
   #---------------------------------------------------------------------------
@@ -263,14 +266,14 @@ set_arguments() {
     fi
 
     [[ -n $GIT_DIR ]] \
-      && GIT="$GIT --no-pager --work-tree $TARGETDIR --git-dir $GIT_DIR"
+      && GIT="$GIT --no-pager --work-tree $watch_dir --git-dir $GIT_DIR"
   fi
 
   #---------------------------------------------------------------------------
   # CD into target directory
 
-  cd "$TARGETDIR" || {
-    stderr "Error: Can't change directory to '$TARGETDIR'."
+  cd "$watch_dir" || {
+    stderr "Error: Can't change directory to '$watch_dir'."
     exit 5
   }
 }
@@ -480,13 +483,6 @@ eval "$INW" "${INW_ARGS[@]}" | while read -r line; do
         FORMATTED_COMMITMSG=$($GIT diff --stat | grep '|')
       fi
     fi
-
-#    # CD into target directory
-#    # XXX: Why are we doing this if we've already done it above?
-#    cd "$TARGETDIR" || {
-#      stderr "Error: Can't change directory to '$TARGETDIR'."
-#      exit 6
-#    }
 
     STATUS=$($GIT status -s)
 
