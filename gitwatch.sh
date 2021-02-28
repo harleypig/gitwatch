@@ -5,6 +5,7 @@
 # XXX: Add support for multiple watch directories
 # XXX: Can we use git -C instead of changing to the directory ourselves?
 # XXX: Create man page
+# XXX: Add bash coverage
 
 # Copyright (C) 2013-2018  Patrick Lehner
 #   with modifications and contributions by:
@@ -60,10 +61,8 @@
 
 # XXX: Document these allowed environment variables
 
-BRANCH="${GW_GIT_BRANCH:-}"
 COMMITMSG="${GW_COMMITMSG:-Scripted auto-commit on change (%d) by gitwatch.sh}"
 DATE_FMT="${GW_DATE_FMT:-+%Y-%m-%d %H:%M:%S}"
-REMOTE="${GW_REMOTE:-}"
 
 LISTCHANGES=-1
 LISTCHANGES_COLOR="--color=always"
@@ -282,6 +281,35 @@ diff-lines() {
     fi
   done
 }
+
+#-----------------------------------------------------------------------------
+# XXX: Document me!!!
+
+push_cmd() {
+  local push
+
+  [[ -z $REMOTE ]] && REMOTE="${GW_REMOTE:-}"
+
+  if [[ -n $REMOTE ]]; then # are we pushing to a remote?
+    [[ -z $BRANCH ]] && BRANCH="${GW_GIT_BRANCH:-}"
+
+    if [[ -z $BRANCH ]]; then  # Do we have a branch set to push to ?
+      push="$GIT push $REMOTE" # Branch not set, push to remote without a branch
+
+    else
+      # check if we are on a detached HEAD
+      if HEADREF=$($GIT symbolic-ref HEAD 2> /dev/null); then # HEAD is not detached
+        push="$GIT push $REMOTE ${HEADREF#refs/heads/}:$BRANCH"
+
+      else # HEAD is detached
+        push="$GIT push $REMOTE $BRANCH"
+      fi
+    fi
+  fi
+
+  printf '%s' "$push"
+}
+
 ###############################################################################
 # Sanity checks
 
@@ -377,6 +405,7 @@ set_arguments
 
 #-----------------------------------------------------------------------------
 # CD into target directory
+# XXX: Move this into set_arguments?
 
 cd "$TARGETDIR" || {
   stderr "Error: Can't change directory to '${TARGETDIR}'."
@@ -390,25 +419,6 @@ if ! grep "%d" > /dev/null <<< "$COMMITMSG"; then # if commitmsg didn't contain 
   DATE_FMT=""                                     # empty date format (will disable splicing in the main loop)
   FORMATTED_COMMITMSG="$COMMITMSG"                # save (unchanging) commit message
 fi
-
-#-----------------------------------------------------------------------------
-PUSH_CMD=
-
-if [[ -n $REMOTE ]]; then        # are we pushing to a remote?
-  if [[ -z $BRANCH ]]; then      # Do we have a branch set to push to ?
-    PUSH_CMD="$GIT push $REMOTE" # Branch not set, push to remote without a branch
-
-  else
-    # check if we are on a detached HEAD
-    if HEADREF=$($GIT symbolic-ref HEAD 2> /dev/null); then # HEAD is not detached
-      PUSH_CMD="$GIT push $REMOTE ${HEADREF#refs/heads/}:$BRANCH"
-
-    else # HEAD is detached
-      PUSH_CMD="$GIT push $REMOTE $BRANCH"
-    fi
-  fi
-fi
-
 
 ###############################################################################
 
@@ -477,8 +487,11 @@ eval "$INW" "${INW_ARGS[@]}" | while read -r line; do
       # shellcheck disable=SC2086
       $GIT commit $GIT_COMMIT_ARGS -m"$FORMATTED_COMMITMSG" # construct commit message and commit
 
+      PUSH_CMD="$(push_cmd)"
+
       if [ -n "$PUSH_CMD" ]; then
         echo "Push command is $PUSH_CMD"
+        # XXX: GAH! Again with the eval! No! Fix!
         eval "$PUSH_CMD"
       fi
     fi
