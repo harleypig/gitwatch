@@ -1,0 +1,87 @@
+name: Gitwatch QA
+
+on:
+  push:
+  pull_request:
+    branches: [master]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  super-lint:
+    name: Lint Code Base
+
+    # Don't run action if commit message has #noaction in it.
+    if: "! contains(github.event.head_commit.message, '#noaction')"
+
+    # I don't think running lint on multiple os' will do any good.
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Run Super-Linter
+        uses: github/super-linter@v3
+        env:
+          DEFAULT_BRANCH: main
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  bats:
+    name: BATS Tests
+
+    # Don't run action if commit message has #noaction in it.
+    if: "! contains(github.event.head_commit.message, '#noaction')"
+
+    # The type of runner that the job will run on
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+
+    timeout-minutes: 5
+
+    steps:
+      - name: Setup BATS
+        # Even though this says 1.2.0,it's actually using 1.2.1
+        uses: mig4/setup-bats@v1.2.0
+
+      - name: Setup ruby
+        uses: actions/setup-ruby@v1
+        with:
+          ruby-version: 2.7
+
+      - name: Install ruby dependencies
+        run: bundle update --bundler && bundle install
+
+      - name: Install tools
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get -y install inotify-tools
+            sudo apt-get -y install bats
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            brew install fswatch
+            brew install coreutils   # in order to get readlink
+          else
+            echo "Unsupported OS: $RUNNER_OS"
+            exit 1
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+
+      - name: Run tests
+        run: |
+          git config --global user.email "test@email.com"
+          git config --global user.name "test user"
+          bashcov bats -rt tests
+
+      - name: Upload reports to Codecov
+        run: bash <(curl -s https://codecov.io/bash) -Z

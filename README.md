@@ -4,6 +4,7 @@ A bash script to watch a file or folder and commit changes to a git repo
 
 [![Super-Linter](https://github.com/harleypig/gitwatch/actions/workflows/superlinter.yml/badge.svg?branch=addworkflow)](https://github.com/harleypig/gitwatch/actions/workflows/superlinter.yml)
 [![BATS](https://github.com/harleypig/gitwatch/actions/workflows/run-tests.yml/badge.svg?branch=addworkflow)](https://github.com/harleypig/gitwatch/actions/workflows/run-tests.yml)
+[![CodeFactor](https://www.codefactor.io/repository/github/harleypig/gitwatch/badge)](https://www.codefactor.io/repository/github/harleypig/gitwatch)
 
 ## What to use it for?
 That's really up to you, but here are some examples:
