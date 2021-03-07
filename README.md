@@ -2,8 +2,8 @@
 
 A bash script to watch a file or folder and commit changes to a git repo
 
-[![Super-Linter](https://github.com/harleypig/gitwatch/actions/workflows/superlinter.yml/badge.svg?branch=addworkflow)](https://github.com/harleypig/gitwatch/actions/workflows/superlinter.yml)
-[![Execution tests](https://github.com/harleypig/gitwatch/actions/workflows/run-tests.yml/badge.svg?branch=addworkflow)](https://github.com/harleypig/gitwatch/actions/workflows/run-tests.yml)
+[![](../../workflows/superlinter.yml/badge.svg?branch=addworkflow)](https://github.com/harleypig/gitwatch/actions/workflows/superlinter.yml)
+[![](../../workflows/run-tests.yml/badge.svg?branch=addworkflow)](https://github.com/harleypig/gitwatch/actions/workflows/run-tests.yml)
 
 ## What to use it for?
 That's really up to you, but here are some examples:
