@@ -9,6 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
+  #-----------------------------------------------------------------------------
   super-lint:
     name: Lint Code Base
 
@@ -27,36 +28,38 @@ jobs:
       - name: Run Super-Linter
         uses: github/super-linter@v3
         env:
-          DEFAULT_BRANCH: main
+          DEFAULT_BRANCH: master
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+  #-----------------------------------------------------------------------------
   bats:
     name: BATS Tests
 
     # Don't run action if commit message has #noaction in it.
     if: "! contains(github.event.head_commit.message, '#noaction')"
 
-    # The type of runner that the job will run on
-    runs-on: ${{ matrix.os }}
-
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest]
 
+    # The type of runner that the job will run on
+    runs-on: ${{ matrix.os }}
+
     timeout-minutes: 5
 
     steps:
+      - name: Setup ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: 2.7
+          bundler-cache: true
+
+      - name: Install bashcov
+        run: gem 'codecov' && gem 'bashcov'
+
       - name: Setup BATS
         # Even though this says 1.2.0,it's actually using 1.2.1
         uses: mig4/setup-bats@v1.2.0
-
-      - name: Setup ruby
-        uses: actions/setup-ruby@v1
-        with:
-          ruby-version: 2.7
-
-      - name: Install ruby dependencies
-        run: bundle update --bundler && bundle install
 
       - name: Install tools
         shell: bash
