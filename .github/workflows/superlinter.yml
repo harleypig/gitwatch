@@ -1,0 +1,24 @@
+name: Super-Linter
+
+on:
+  push:
+  pull-request:
+    branches: [master]
+
+jobs:
+  super-lint:
+    name: Lint Code Base
+    # I don't think running lint on multiple os' will do any good.
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Run Super-Linter
+        uses: github/super-linter@v3
+        env:
+          DEFAULT_BRANCH: main
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

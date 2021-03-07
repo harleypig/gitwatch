@@ -2,6 +2,8 @@
 
 A bash script to watch a file or folder and commit changes to a git repo
 
+[![GitHub Super-Linter](https://github.com/harleypig/gitwatch/worflows/Lint%20Code%20Base/badge.svg)](https://github.com/marketplace/actions/super-linter)
+
 ## What to use it for?
 That's really up to you, but here are some examples:
 * **config files**: some programs auto-write their config files, without waiting for you to click an 'Apply' button; or even if there is such a button, most programs offer you no way of going  back to an earlier version of your settings. If you commit your config file(s) to a git repo, you can track changes and go back to older versions. This script makes it convenient, to have all changes recorded automatically.
