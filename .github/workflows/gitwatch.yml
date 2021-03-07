@@ -55,7 +55,7 @@ jobs:
           bundler-cache: true
 
       - name: Install bashcov
-        run: gem 'codecov' && gem 'bashcov'
+        run: gem install codecov && gem install bashcov
 
       - name: Setup BATS
         # Even though this says 1.2.0,it's actually using 1.2.1
