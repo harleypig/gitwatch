@@ -15,16 +15,33 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest]
-        
+
     timeout-minutes: 5
 
     steps:
       - name: Setup BATS
         # Even though this says 1.2.0,it's actually using 1.2.1
         uses: mig4/setup-bats@v1.2.0
-        
+
       - name: Checkout code
         uses: actions/checkout@v2
-        
+
+      - name: Install tools
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get -y install inotify-tools
+            sudo apt-get -y install bats
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            brew install fswatch
+            brew install coreutils   # in order to get readlink
+          else
+            echo "Unsupported OS: $RUNNER_OS"
+            exit 1
+          fi
+
       - name: Run tests
-        run: bats -v
+        run: |
+          git config --global user.email "test@email.com"
+          git config --global user.name "test user"
+          bats -rt tests
