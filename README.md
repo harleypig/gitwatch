@@ -2,7 +2,8 @@
 
 A bash script to watch a file or folder and commit changes to a git repo
 
-[![GitHub Super-Linter](https://github.com/harleypig/gitwatch/workflows/Lint%20Code%20Base/badge.svg)](https://github.com/marketplace/actions/super-linter)
+[![Super-Linter](https://github.com/harleypig/gitwatch/actions/workflows/superlinter.yml/badge.svg?branch=addworkflow)](https://github.com/harleypig/gitwatch/actions/workflows/superlinter.yml)
+[![Execution tests](https://github.com/harleypig/gitwatch/actions/workflows/run-tests.yml/badge.svg?branch=addworkflow)](https://github.com/harleypig/gitwatch/actions/workflows/run-tests.yml)
 
 ## What to use it for?
 That's really up to you, but here are some examples:
