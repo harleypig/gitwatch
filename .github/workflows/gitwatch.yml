@@ -61,15 +61,16 @@ jobs:
         # Even though this says 1.2.0,it's actually using 1.2.1
         uses: mig4/setup-bats@v1.2.0
 
-      - name: Install tools
+      - name: Install gitwatch dependencies
         shell: bash
         run: |
           if [ "$RUNNER_OS" == "Linux" ]; then
             sudo apt-get -y install inotify-tools
-            sudo apt-get -y install bats
+
           elif [ "$RUNNER_OS" == "macOS" ]; then
             brew install fswatch
             brew install coreutils   # in order to get readlink
+
           else
             echo "Unsupported OS: $RUNNER_OS"
             exit 1
@@ -81,6 +82,7 @@ jobs:
           fetch-depth: 2
 
       - name: Run tests
+        shell: bash
         run: |
           git config --global user.email "test@email.com"
           git config --global user.name "test user"
