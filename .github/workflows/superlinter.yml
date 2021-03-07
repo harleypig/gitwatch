@@ -11,6 +11,9 @@ jobs:
     # I don't think running lint on multiple os' will do any good.
     runs-on: ubuntu-latest
 
+    # Don't run action if commit message has #noaction in it.
+    if: "! contains(github.event.head_commit.message, '#noaction')"
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
