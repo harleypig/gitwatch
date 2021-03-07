@@ -2,7 +2,7 @@
 
 A bash script to watch a file or folder and commit changes to a git repo
 
-[![GitHub Super-Linter](https://github.com/harleypig/gitwatch/worflows/Lint%20Code%20Base/badge.svg)](https://github.com/marketplace/actions/super-linter)
+[![GitHub Super-Linter](https://github.com/harleypig/gitwatch/workflows/Lint%20Code%20Base/badge.svg)](https://github.com/marketplace/actions/super-linter)
 
 ## What to use it for?
 That's really up to you, but here are some examples:
