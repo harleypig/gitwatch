@@ -1,0 +1,30 @@
+name: BATS
+
+on:
+  push:
+  pull_request:
+    branches: [ master ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  gitwatch:
+    # The type of runner that the job will run on
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+        
+    timeout-minutes: 5
+
+    steps:
+      - name: Setup BATS
+        # Even though this says 1.2.0,it's actually using 1.2.1
+        uses: mig4/setup-bats@v1.2.0
+        
+      - name: Checkout code
+        uses: actions/checkout@v2
+        
+      - name: Run tests
+        run: bats -v
